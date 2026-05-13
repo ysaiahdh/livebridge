@@ -50,3 +50,6 @@ app.*.map.json
 /android/key.properties
 *.jks
 *.keystore
+
+# Sript launching app with USB debugging enabled
+run_android.ps1
