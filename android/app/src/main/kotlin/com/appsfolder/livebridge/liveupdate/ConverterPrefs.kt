@@ -152,6 +152,15 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putString(KEY_UPDATE_LAST_NOTIFIED_VERSION, normalized).apply()
     }
 
+    fun getAppLanguage(): String {
+        return prefs.getString(KEY_APP_LANGUAGE, "") ?: ""
+    }
+
+    fun setAppLanguage(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit().putString(KEY_APP_LANGUAGE, normalized).apply()
+    }
+
     fun getAospCuttingEnabled(): Boolean {
         return prefs.getBoolean(KEY_AOSP_CUTTING_ENABLED, false)
     }
@@ -485,6 +494,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_UPDATE_CACHED_LATEST_VERSION = "update_cached_latest_version"
         private const val KEY_UPDATE_CACHED_AVAILABLE = "update_cached_available"
         private const val KEY_UPDATE_LAST_NOTIFIED_VERSION = "update_last_notified_version"
+        private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_AOSP_CUTTING_ENABLED = "aosp_cutting_enabled"
         private const val KEY_ANIMATED_ISLAND_ENABLED = "animated_island_enabled"
         private const val KEY_HYPERBRIDGE_ENABLED = "hyperbridge_enabled"

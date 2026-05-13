@@ -1,15 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_strings.dart';
+import 'platform/livebridge_platform.dart';
 import 'screens/home_page.dart';
 
 void main() {
   runApp(const LiveBridgeApp());
 }
 
-class LiveBridgeApp extends StatelessWidget {
+class LiveBridgeApp extends StatefulWidget {
   const LiveBridgeApp({super.key});
 
+  @override
+  State<LiveBridgeApp> createState() => _LiveBridgeAppState();
+}
+
+class _LiveBridgeAppState extends State<LiveBridgeApp> {
+  Locale? _localeOverride;
+  String _appLanguageId = '';
+
   static const Color _brandSeed = Color(0xFF0D9488);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalePreference();
+  }
+
+  Future<void> _loadLocalePreference() async {
+    // Persisted language selection overrides the system locale when present.
+    final String raw = (await LiveBridgePlatform.getAppLanguage()).trim();
+    final String normalized = raw.toLowerCase();
+    if (!mounted) return;
+    setState(() {
+      _appLanguageId = normalized;
+      _localeOverride = _localeFromId(normalized);
+    });
+  }
+
+  void _handleAppLanguageChanged(String languageId) {
+    setState(() {
+      _appLanguageId = languageId;
+      _localeOverride = _localeFromId(languageId);
+    });
+  }
+
+  Locale? _localeFromId(String languageId) {
+    switch (languageId) {
+      case 'en':
+        return const Locale('en');
+      case 'fr':
+        return const Locale('fr');
+      default:
+        return null;
+    }
+  }
 
   ThemeData _buildLightTheme(ColorScheme colorScheme) {
     return ThemeData(
@@ -127,16 +172,30 @@ class LiveBridgeApp extends StatelessWidget {
     return MaterialApp(
       title: 'LiveBridge',
       debugShowCheckedModeBanner: false,
-      supportedLocales: const <Locale>[Locale('en'), Locale('ru')],
+      supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
+        AppStrings.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      locale: _localeOverride,
+      localeResolutionCallback: (Locale? locale, Iterable<Locale> supported) {
+        if (locale == null) return supported.first;
+        for (final supportedLocale in supported) {
+          if (supportedLocale.languageCode == locale.languageCode) {
+            return supportedLocale;
+          }
+        }
+        return supported.first;
+      },
       theme: _buildLightTheme(lightColorScheme),
       darkTheme: _buildDarkTheme(darkColorScheme),
       themeMode: ThemeMode.system,
-      home: const LiveBridgeHomePage(),
+      home: LiveBridgeHomePage(
+        appLanguageId: _appLanguageId,
+        onAppLanguageChanged: _handleAppLanguageChanged,
+      ),
     );
   }
 }

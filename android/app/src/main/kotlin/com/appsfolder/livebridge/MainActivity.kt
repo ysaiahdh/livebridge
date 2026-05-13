@@ -323,6 +323,12 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getAppLanguage" -> res.success(prefs.getAppLanguage())
+            "setAppLanguage" -> {
+                prefs.setAppLanguage(call.argument<String>("value"))
+                res.success(true)
+            }
+
             "getAppVersionName" -> res.success(getAppVersionName())
             "showUpdateAvailableNotification" -> {
                 val version = call.argument<String>("version")?.trim().orEmpty()

@@ -110,6 +110,9 @@ class LiveBridgePlatform {
       _askStr('getUpdateLastNotifiedVersion');
   static Future<bool> setUpdateLastNotifiedVersion(String value) =>
       _askBool('setUpdateLastNotifiedVersion', {'value': value});
+  static Future<String> getAppLanguage() => _askStr('getAppLanguage');
+  static Future<bool> setAppLanguage(String value) =>
+      _askBool('setAppLanguage', {'value': value});
   static Future<String> getAppVersionName() => _askStr('getAppVersionName');
   static Future<bool> showUpdateAvailableNotification({
     required String version,

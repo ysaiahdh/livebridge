@@ -16,8 +16,21 @@ import 'app_presentation_settings_page.dart';
 
 enum _PackagePickerTarget { conversion, otp, bypass, dedup }
 
+class _AppLanguageOption {
+  const _AppLanguageOption({required this.id, required this.label});
+  final String id;
+  final String label;
+}
+
 class LiveBridgeHomePage extends StatefulWidget {
-  const LiveBridgeHomePage({super.key});
+  const LiveBridgeHomePage({
+    super.key,
+    required this.appLanguageId,
+    required this.onAppLanguageChanged,
+  });
+
+  final String appLanguageId;
+  final ValueChanged<String> onAppLanguageChanged;
 
   @override
   State<LiveBridgeHomePage> createState() => _LiveBridgeHomePageState();
@@ -1144,6 +1157,88 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     _snack(AppStrings.of(context).liveUpdatesUnavailable);
   }
 
+  Future<void> _openAppLanguagePicker() async {
+    LiveBridgeHaptics.openSurface();
+    final AppStrings s = AppStrings.of(context);
+    final List<_AppLanguageOption> options = _buildAppLanguageOptions(s);
+    final String? selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final ColorScheme colorScheme = Theme.of(context).colorScheme;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  s.appLanguagePickerTitle,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...options.map(
+                  (option) => RadioListTile<String>(
+                    value: option.id,
+                    groupValue: widget.appLanguageId,
+                    onChanged: (value) {
+                      Navigator.of(context).pop(value);
+                    },
+                    title: Text(
+                      option.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    activeColor: colorScheme.primary,
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selected == null) return;
+    await _setAppLanguage(selected);
+  }
+
+  Future<void> _setAppLanguage(String languageId) async {
+    // Persist and broadcast the language change so MaterialApp can rebuild.
+    final String normalized = languageId.trim().toLowerCase();
+    final bool saved = await LiveBridgePlatform.setAppLanguage(normalized);
+    if (!mounted) return;
+    if (!saved) {
+      _snack(AppStrings.of(context).saveFailed);
+      return;
+    }
+    widget.onAppLanguageChanged(normalized);
+  }
+
+  List<_AppLanguageOption> _buildAppLanguageOptions(AppStrings s) {
+    return <_AppLanguageOption>[
+      _AppLanguageOption(id: '', label: s.appLanguageSystem),
+      _AppLanguageOption(id: 'en', label: s.appLanguageEnglish),
+      _AppLanguageOption(id: 'fr', label: s.appLanguageFrench),
+    ];
+  }
+
+  String _languageLabelForId(String languageId, AppStrings s) {
+    switch (languageId) {
+      case 'en':
+        return s.appLanguageEnglish;
+      case 'fr':
+        return s.appLanguageFrench;
+      default:
+        return s.appLanguageSystem;
+    }
+  }
+
   Future<void> _acknowledgeBlockedJoke() async {
     LiveBridgeHaptics.confirm();
     final bool saved = await LiveBridgePlatform.setPixelJokeBypassEnabled(true);
@@ -1753,6 +1848,45 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     );
   }
 
+  Widget _buildAppLanguageTile(AppStrings s) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final String label = _languageLabelForId(widget.appLanguageId, s);
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        s.appLanguageTitle,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        s.appLanguageDescription,
+        style: TextStyle(
+          color: colorScheme.onSurfaceVariant,
+          fontSize: 13,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            label,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+      onTap: _openAppLanguagePicker,
+    );
+  }
+
   Widget _buildSettingsCard(AppStrings s) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
@@ -1820,6 +1954,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               activeThumbColor: colorScheme.primary,
             ),
           ],
+          const SizedBox(height: 8),
+          _buildAppLanguageTile(s),
           const SizedBox(height: 8),
           SwitchListTile.adaptive(
             value: _updateChecksEnabled,

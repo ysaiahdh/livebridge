@@ -1,374 +1,719 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AppStrings {
-  AppStrings({required this.isRu});
-  final bool isRu;
+  AppStrings({
+    required this.locale,
+    required Map<String, String> values,
+    required Map<String, String> fallback,
+  }) : _values = values,
+       _fallback = fallback;
+
+  final Locale locale;
+  final Map<String, String> _values;
+  final Map<String, String> _fallback;
+
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('en'),
+    Locale('fr'),
+  ];
+
+  static const LocalizationsDelegate<AppStrings> delegate =
+      _AppStringsDelegate();
 
   static AppStrings of(BuildContext context) {
-    final bool isRu = Localizations.localeOf(
-      context,
-    ).languageCode.toLowerCase().startsWith('ru');
-    return AppStrings(isRu: isRu);
+    return Localizations.of<AppStrings>(context, AppStrings) ??
+        AppStrings.fallback();
   }
 
-  String get refresh => isRu ? 'Обновить' : 'Refresh';
-  String get saved => isRu ? 'Настройки сохранены.' : 'Settings saved.';
+  static AppStrings fallback() {
+    return AppStrings(
+      locale: const Locale('en'),
+      values: const <String, String>{},
+      fallback: const <String, String>{},
+    );
+  }
+
+  static Future<AppStrings> load(Locale locale) async {
+    final String languageCode = _normalizeLanguageCode(locale);
+    // Always load English so missing keys still resolve to readable text.
+    final Map<String, String> fallback = await _loadLanguageMap('en');
+    final Map<String, String> values = languageCode == 'en'
+        ? fallback
+        : await _loadLanguageMap(languageCode);
+    return AppStrings(
+      locale: Locale(languageCode),
+      values: values,
+      fallback: fallback,
+    );
+  }
+
+  static String _normalizeLanguageCode(Locale locale) {
+    final String code = locale.languageCode.toLowerCase();
+    for (final supported in supportedLocales) {
+      if (supported.languageCode == code) {
+        return code;
+      }
+    }
+    return 'en';
+  }
+
+  static Future<Map<String, String>> _loadLanguageMap(
+    String languageCode,
+  ) async {
+    final String normalized = languageCode.toLowerCase();
+    final String assetPath = 'Languages/$normalized.json';
+    try {
+      final String raw = await rootBundle.loadString(assetPath);
+      final dynamic decoded = jsonDecode(raw);
+      if (decoded is! Map) return const <String, String>{};
+      final Map<String, dynamic> root = Map<String, dynamic>.from(decoded);
+      final Object? appStringsNode = root['app_strings'];
+      if (appStringsNode is! Map) return const <String, String>{};
+      // JSON values are normalized to strings for lookup simplicity.
+      return Map<String, dynamic>.from(appStringsNode).map(
+        (key, value) => MapEntry(
+          key.toString(),
+          value?.toString() ?? '',
+        ),
+      );
+    } catch (_) {
+      return const <String, String>{};
+    }
+  }
+
+  String _string(String key, {String? fallback}) {
+    final String snakeKey = _toSnakeCase(key);
+    final String? directValue = _values[key];
+    final String? snakeValue = _values[snakeKey];
+    final String? fallbackValue = _fallback[key] ?? _fallback[snakeKey];
+    return _firstNonEmpty(
+          <String?>[directValue, snakeValue, fallbackValue, fallback],
+        ) ??
+        key;
+  }
+
+  String _format(String template, Map<String, String> params) {
+    var result = template;
+    params.forEach((name, value) {
+      result = result.replaceAll('{$name}', value);
+    });
+    return result;
+  }
+
+  String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  static String _toSnakeCase(String input) {
+    if (input.isEmpty) return input;
+    final StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < input.length; i++) {
+      final String char = input[i];
+      final bool isUpper =
+          char.toUpperCase() == char && char.toLowerCase() != char;
+      if (isUpper && i > 0) {
+        buffer.write('_');
+      }
+      buffer.write(isUpper ? char.toLowerCase() : char);
+    }
+    return buffer.toString();
+  }
+
+  String get refresh => _string('refresh', fallback: 'Refresh');
+  String get saved => _string('saved', fallback: 'Settings saved.');
   String get saveFailed =>
-      isRu ? 'Не удалось сохранить настройки.' : 'Unable to save settings.';
-  String get permissionGranted => isRu
-      ? 'Разрешение на уведомления выдано.'
-      : 'Notification permission granted.';
-  String get permissionDenied => isRu
-      ? 'Разрешение на уведомления не выдано.'
-      : 'Notification permission was not granted.';
-  String get listenerOpened => isRu
-      ? 'Открыты настройки Notification Listener.'
-      : 'Opened Notification Listener settings.';
-  String get listenerUnavailable => isRu
-      ? 'Не удалось открыть настройки Listener.'
-      : 'Unable to open Listener settings on this device.';
-  String get notificationsOpened => isRu
-      ? 'Открыты настройки уведомлений приложения.'
-      : 'Opened app notification settings.';
-  String get notificationsUnavailable => isRu
-      ? 'Не удалось открыть настройки уведомлений.'
-      : 'Unable to open app notification settings.';
-  String get liveUpdatesOpened => isRu
-      ? 'Открыты настройки Live Updates.'
-      : 'Opened Live Updates settings.';
-  String get liveUpdatesUnavailable => isRu
-      ? 'Не удалось открыть настройки Live Updates.'
-      : 'Unable to open Live Updates settings on this device.';
-  String get githubOpenFailed => isRu
-      ? 'Не удалось открыть ссылку GitHub.'
-      : 'Unable to open GitHub link.';
-  String get dictionaryEmpty => isRu
-      ? 'Словарь пустой или поврежден.'
-      : 'Dictionary is empty or invalid.';
-  String get dictionaryDownloadFailed =>
-      isRu ? 'Не удалось выгрузить словарь.' : 'Failed to export dictionary.';
-  String get dictionarySaved =>
-      isRu ? 'Словарь сохранен в Загрузки.' : 'Dictionary saved to Downloads.';
-  String get dictionaryUploadDone => isRu
-      ? 'Пользовательский словарь загружен.'
-      : 'Custom dictionary uploaded.';
-  String get dictionaryUpdateDone =>
-      isRu ? 'Словарь обновлен из GitHub.' : 'Dictionary updated from GitHub.';
+      _string('saveFailed', fallback: 'Unable to save settings.');
+  String get permissionGranted => _string(
+        'permissionGranted',
+        fallback: 'Notification permission granted.',
+      );
+  String get permissionDenied => _string(
+        'permissionDenied',
+        fallback: 'Notification permission was not granted.',
+      );
+  String get listenerOpened => _string(
+        'listenerOpened',
+        fallback: 'Opened Notification Listener settings.',
+      );
+  String get listenerUnavailable => _string(
+        'listenerUnavailable',
+        fallback: 'Unable to open Listener settings on this device.',
+      );
+  String get notificationsOpened => _string(
+        'notificationsOpened',
+        fallback: 'Opened app notification settings.',
+      );
+  String get notificationsUnavailable => _string(
+        'notificationsUnavailable',
+        fallback: 'Unable to open app notification settings.',
+      );
+  String get liveUpdatesOpened => _string(
+        'liveUpdatesOpened',
+        fallback: 'Opened Live Updates settings.',
+      );
+  String get liveUpdatesUnavailable => _string(
+        'liveUpdatesUnavailable',
+        fallback: 'Unable to open Live Updates settings on this device.',
+      );
+  String get githubOpenFailed =>
+      _string('githubOpenFailed', fallback: 'Unable to open GitHub link.');
+  String get dictionaryEmpty => _string(
+        'dictionaryEmpty',
+        fallback: 'Dictionary is empty or invalid.',
+      );
+  String get dictionaryDownloadFailed => _string(
+        'dictionaryDownloadFailed',
+        fallback: 'Failed to export dictionary.',
+      );
+  String get dictionarySaved => _string(
+        'dictionarySaved',
+        fallback: 'Dictionary saved to Downloads.',
+      );
+  String get dictionaryUploadDone => _string(
+        'dictionaryUploadDone',
+        fallback: 'Custom dictionary uploaded.',
+      );
+  String get dictionaryUpdateDone => _string(
+        'dictionaryUpdateDone',
+        fallback: 'Dictionary updated from GitHub.',
+      );
   String get dictionaryInvalid =>
-      isRu ? 'Невалидный JSON словаря.' : 'Invalid dictionary JSON.';
-  String get dictionaryUploadFailed =>
-      isRu ? 'Не удалось загрузить словарь.' : 'Failed to upload dictionary.';
-  String get dictionaryUpdateFailed => isRu
-      ? 'Не удалось обновить словарь из GitHub.'
-      : 'Failed to update dictionary from GitHub.';
-  String get dictionaryResetDone => isRu
-      ? 'Возвращен словарь из приложения.'
-      : 'Bundled dictionary restored.';
+      _string('dictionaryInvalid', fallback: 'Invalid dictionary JSON.');
+  String get dictionaryUploadFailed => _string(
+        'dictionaryUploadFailed',
+        fallback: 'Failed to upload dictionary.',
+      );
+  String get dictionaryUpdateFailed => _string(
+        'dictionaryUpdateFailed',
+        fallback: 'Failed to update dictionary from GitHub.',
+      );
+  String get dictionaryResetDone => _string(
+        'dictionaryResetDone',
+        fallback: 'Bundled dictionary restored.',
+      );
   String get dictionaryResetFailed =>
-      isRu ? 'Не удалось сбросить словарь.' : 'Failed to reset dictionary.';
+      _string('dictionaryResetFailed', fallback: 'Failed to reset dictionary.');
 
-  String get heroTitle => 'LiveBridge';
-  String get masterToggleLockedHint => isRu
-      ? 'Сначала выдайте доступ к уведомлениям и разрешение на уведомления.'
-      : 'Grant notification listener access and notifications permission first.';
-  String get githubUrl => 'github.com/appsfolder/livebridge';
-  String get githubReleasesUrl => 'github.com/appsfolder/livebridge/releases';
-  String get downloadPageUrl => 'appsfolder.github.io/livebridge';
-  String get reportBug => isRu ? 'Сообщить о баге' : 'Report a bug';
-  String get bugReportCopied => isRu
-      ? 'Диагностика скопирована в буфер. Вставьте в issue.'
-      : 'Diagnostics copied to clipboard. Paste it into the issue.';
-  String get bugReportCopyFailed => isRu
-      ? 'Не удалось скопировать диагностику.'
-      : 'Failed to copy diagnostics.';
-  String get hideWarningBanner => isRu ? 'Скрыть' : 'Hide';
-  String get backgroundWarningTitle =>
-      isRu ? 'Важно для фоновой работы' : 'Background mode warning';
-  String backgroundWarningBody(String deviceLabel) => isRu
-      ? 'Для $deviceLabel нужно вручную разрешить автозапуск и работу без ограничений в фоне, иначе Live Updates могут не появляться или зависать.'
-      : 'On $deviceLabel, allow autostart and unrestricted background activity, otherwise Live Updates may stop appearing or freeze.';
-  String get samsungWarningTitle => isRu
-      ? 'Для Samsung есть версия лучше'
-      : 'A better build is available for Samsung';
-  String get samsungWarningBody => isRu
-      ? 'Для Samsung доступна специальная сборка LiveBridge с улучшенной поддержкой Samsung-функций. Лучше установить ее вместо обычной версии.'
-      : 'There is a dedicated LiveBridge build for Samsung devices with improved Samsung-specific support. It is recommended over the regular build.';
+  String get heroTitle => _string('heroTitle', fallback: 'LiveBridge');
+  String get masterToggleLockedHint => _string(
+        'masterToggleLockedHint',
+        fallback:
+            'Grant notification listener access and notifications permission first.',
+      );
+  String get githubUrl =>
+      _string('githubUrl', fallback: 'github.com/appsfolder/livebridge');
+  String get githubReleasesUrl => _string(
+        'githubReleasesUrl',
+        fallback: 'github.com/appsfolder/livebridge/releases',
+      );
+  String get downloadPageUrl =>
+      _string('downloadPageUrl', fallback: 'appsfolder.github.io/livebridge');
+  String get reportBug => _string('reportBug', fallback: 'Report a bug');
+  String get bugReportCopied => _string(
+        'bugReportCopied',
+        fallback: 'Diagnostics copied to clipboard. Paste it into the issue.',
+      );
+  String get bugReportCopyFailed => _string(
+        'bugReportCopyFailed',
+        fallback: 'Failed to copy diagnostics.',
+      );
+  String get hideWarningBanner => _string('hideWarningBanner', fallback: 'Hide');
+  String get backgroundWarningTitle => _string(
+        'backgroundWarningTitle',
+        fallback: 'Background mode warning',
+      );
+  String backgroundWarningBody(String deviceLabel) {
+    final String template = _string(
+      'backgroundWarningBody',
+      fallback:
+          'On {deviceLabel}, allow autostart and unrestricted background activity, otherwise Live Updates may stop appearing or freeze.',
+    );
+    return _format(template, {'deviceLabel': deviceLabel});
+  }
+
+  String get samsungWarningTitle => _string(
+        'samsungWarningTitle',
+        fallback: 'A better build is available for Samsung',
+      );
+  String get samsungWarningBody => _string(
+        'samsungWarningBody',
+        fallback:
+            'There is a dedicated LiveBridge build for Samsung devices with improved Samsung-specific support. It is recommended over the regular build.',
+      );
   String get samsungWarningAction =>
-      isRu ? 'Открыть загрузки' : 'Get Samsung build';
+      _string('samsungWarningAction', fallback: 'Get Samsung build');
 
-  String get accessTitle => isRu ? 'Разрешения' : 'Permissions';
-  String get accessSubtitle => isRu
-      ? 'Без этих трёх разрешений конвертация будет работать нестабильно.'
-      : 'Conversion reliability depends on these three permissions.';
-  String get listenerAccess =>
-      isRu ? 'Доступ к уведомлениям' : 'Notification Listener access';
-  String get postNotifications =>
-      isRu ? 'Отправка уведомлений' : 'Post notifications permission';
-  String get liveUpdatesAccess =>
-      isRu ? 'Продвижение Live Updates' : 'Live Updates promotion';
-  String get open => isRu ? 'Открыть' : 'Open';
-  String get request => isRu ? 'Запросить' : 'Request';
-  String get grant => isRu ? 'Выдать' : 'Grant';
-  String get manage => isRu ? 'Управлять' : 'Manage';
-  String get settingsTitle => isRu ? 'Настройки' : 'Settings';
-  String get keepAliveForegroundTitle =>
-      isRu ? 'Альтернативный фоновый режим' : 'Alt background mode';
-  String get keepAliveForegroundSubtitle => isRu
-      ? 'Держит foreground-сервис для более стабильной работы в фоне.'
-      : 'Runs a persistent foreground service for better background stability.';
-  String get keepAliveForegroundInactiveSubtitle => isRu
-      ? 'Включите LiveBridge, чтобы режим начал работать.'
-      : 'Enable the LiveBridge for this mode to take effect.';
-  String get networkSpeedTitle => isRu ? 'Скорость сети' : 'Network speed';
-  String get networkSpeedSubtitle => isRu
-      ? 'Показывает загрузку и отдачу как отдельный Live Update в статус-баре.'
-      : 'Shows current download and upload as a separate Live Update in the status bar.';
-  String get networkSpeedInactiveSubtitle => isRu
-      ? 'Включите LiveBridge, чтобы монитор скорости начал работать.'
-      : 'Enable LiveBridge for the network speed monitor to start working.';
-  String get networkSpeedThresholdTitle =>
-      isRu ? 'Минимальная скорость для показа' : 'Minimum speed to show';
-  String get networkSpeedThresholdSubtitle => isRu
-      ? 'Лайв-элемент появится, когда суммарная скорость загрузки и отдачи достигнет этого порога.'
-      : 'The live element appears when combined download and upload reach this threshold.';
+  String get accessTitle => _string('accessTitle', fallback: 'Permissions');
+  String get accessSubtitle => _string(
+        'accessSubtitle',
+        fallback: 'Conversion reliability depends on these three permissions.',
+      );
+  String get listenerAccess => _string(
+        'listenerAccess',
+        fallback: 'Notification Listener access',
+      );
+  String get postNotifications => _string(
+        'postNotifications',
+        fallback: 'Post notifications permission',
+      );
+  String get liveUpdatesAccess => _string(
+        'liveUpdatesAccess',
+        fallback: 'Live Updates promotion',
+      );
+  String get open => _string('open', fallback: 'Open');
+  String get request => _string('request', fallback: 'Request');
+  String get grant => _string('grant', fallback: 'Grant');
+  String get manage => _string('manage', fallback: 'Manage');
+  String get settingsTitle => _string('settingsTitle', fallback: 'Settings');
+  String get appLanguageTitle =>
+      _string('app_language_title', fallback: 'App language');
+  String get appLanguageDescription => _string(
+        'app_language_description',
+        fallback: 'changes the language used by LiveBridge UI',
+      );
+  String get appLanguagePickerTitle => _string(
+        'app_language_picker_title',
+        fallback: 'Choose app language',
+      );
+  String get appLanguageSystem =>
+      _string('app_language_system', fallback: 'Auto');
+  String get appLanguageEnglish => _string(
+        'app_language_option_english',
+        fallback: 'English',
+      );
+  String get appLanguageFrench => _string(
+        'app_language_option_french',
+        fallback: 'French',
+      );
+  String get keepAliveForegroundTitle => _string(
+        'keepAliveForegroundTitle',
+        fallback: 'Alt background mode',
+      );
+  String get keepAliveForegroundSubtitle => _string(
+        'keepAliveForegroundSubtitle',
+        fallback: 'Runs a persistent foreground service for better background stability.',
+      );
+  String get keepAliveForegroundInactiveSubtitle => _string(
+        'keepAliveForegroundInactiveSubtitle',
+        fallback: 'Enable the LiveBridge for this mode to take effect.',
+      );
+  String get networkSpeedTitle =>
+      _string('networkSpeedTitle', fallback: 'Network speed');
+  String get networkSpeedSubtitle => _string(
+        'networkSpeedSubtitle',
+        fallback:
+            'Shows current download and upload as a separate Live Update in the status bar.',
+      );
+  String get networkSpeedInactiveSubtitle => _string(
+        'networkSpeedInactiveSubtitle',
+        fallback: 'Enable LiveBridge for the network speed monitor to start working.',
+      );
+  String get networkSpeedThresholdTitle => _string(
+        'networkSpeedThresholdTitle',
+        fallback: 'Minimum speed to show',
+      );
+  String get networkSpeedThresholdSubtitle => _string(
+        'networkSpeedThresholdSubtitle',
+        fallback:
+            'The live element appears when combined download and upload reach this threshold.',
+      );
   String get networkSpeedThresholdAlways =>
-      isRu ? 'Показывать всегда' : 'Always show';
-  String get smartExternalDevicesIgnoreDebuggingTitle =>
-      isRu ? 'Игнорировать отладку' : 'Ignore debugging';
-  String get smartExternalDevicesIgnoreDebuggingSubtitle => isRu
-      ? 'Не показывать Live для USB debugging, wireless debugging, ADB и похожих системных уведомлений.'
-      : 'Skip Live updates for USB debugging, wireless debugging, ADB, and similar system notifications.';
-  String get syncDndTitle => isRu ? 'Синхронизировать DnD' : 'Sync DnD';
-  String get syncDndSubtitle => isRu
-      ? 'Если на смартфоне включен режим Не беспокоить, уведомления LiveBridge не показываются.'
-      : 'When Do Not Disturb is enabled on the phone, LiveBridge notifications are hidden.';
+      _string('networkSpeedThresholdAlways', fallback: 'Always show');
+  String get smartExternalDevicesIgnoreDebuggingTitle => _string(
+        'smartExternalDevicesIgnoreDebuggingTitle',
+        fallback: 'Ignore debugging',
+      );
+  String get smartExternalDevicesIgnoreDebuggingSubtitle => _string(
+        'smartExternalDevicesIgnoreDebuggingSubtitle',
+        fallback:
+            'Skip Live updates for USB debugging, wireless debugging, ADB, and similar system notifications.',
+      );
+  String get syncDndTitle => _string('syncDndTitle', fallback: 'Sync DnD');
+  String get syncDndSubtitle => _string(
+        'syncDndSubtitle',
+        fallback:
+            'When Do Not Disturb is enabled on the phone, LiveBridge notifications are hidden.',
+      );
   String get updateChecksTitle =>
-      isRu ? 'Проверка обновлений' : 'Update checking';
-  String get updateChecksSubtitle => isRu
-      ? 'Проверять обновления при входе и не чаще одного раза в 6 часов.'
-      : 'Check updates on app start, and no more than once every 6 hours.';
-  String updateAvailableBanner(String version) => isRu
-      ? 'Доступно обновление${version.isNotEmpty ? ': $version' : ''}'
-      : 'Update available${version.isNotEmpty ? ': $version' : ''}';
-  String get experimentalTitle => isRu ? 'Экспериментальное' : 'Experimental';
-  String get notificationDedupTitle =>
-      isRu ? 'Notification dedup' : 'Notification dedup';
-  String get notificationDedupSubtitle => isRu
-      ? 'Убирает оригинальные clearable-уведомления, если LiveBridge уже показал свой OTP или статус.'
-      : 'Dismisses original clearable notifications after LiveBridge mirrors an OTP or status update.';
-  String get notificationDedupModeLabel =>
-      isRu ? 'Режим dedup' : 'Dedup mode';
-  String get notificationDedupModeOtpStatus => isRu
-      ? 'OTP и статусы'
-      : 'OTP and statuses';
-  String get notificationDedupModeOtpOnly =>
-      isRu ? 'Только OTP' : 'OTP only';
-  String get notificationDedupStatusesTitle => isRu
-      ? 'Также статусы'
-      : 'Also dedup statuses';
-  String get notificationDedupStatusesSubtitle => isRu
-      ? 'Если выключено, dedup применяется только к OTP-кодам.'
-      : 'When disabled, dedup is applied only to OTP notifications.';
+      _string('updateChecksTitle', fallback: 'Update checking');
+  String get updateChecksSubtitle => _string(
+        'updateChecksSubtitle',
+        fallback: 'Check updates on app start, and no more than once every 6 hours.',
+      );
+  String updateAvailableBanner(String version) {
+    final String suffix = version.isNotEmpty ? ': $version' : '';
+    final String template = _string(
+      'updateAvailableBanner',
+      fallback: 'Update available{versionSuffix}',
+    );
+    return _format(template, {
+      'version': version,
+      'versionSuffix': suffix,
+    });
+  }
+
+  String get experimentalTitle =>
+      _string('experimentalTitle', fallback: 'Experimental');
+  String get notificationDedupTitle => _string(
+        'notificationDedupTitle',
+        fallback: 'Notification dedup',
+      );
+  String get notificationDedupSubtitle => _string(
+        'notificationDedupSubtitle',
+        fallback:
+            'Dismisses original clearable notifications after LiveBridge mirrors an OTP or status update.',
+      );
+  String get notificationDedupModeLabel => _string(
+        'notificationDedupModeLabel',
+        fallback: 'Dedup mode',
+      );
+  String get notificationDedupModeOtpStatus => _string(
+        'notificationDedupModeOtpStatus',
+        fallback: 'OTP and statuses',
+      );
+  String get notificationDedupModeOtpOnly => _string(
+        'notificationDedupModeOtpOnly',
+        fallback: 'OTP only',
+      );
+  String get notificationDedupStatusesTitle => _string(
+        'notificationDedupStatusesTitle',
+        fallback: 'Also dedup statuses',
+      );
+  String get notificationDedupStatusesSubtitle => _string(
+        'notificationDedupStatusesSubtitle',
+        fallback: 'When disabled, dedup is applied only to OTP notifications.',
+      );
   String get animatedIslandTitle =>
-      isRu ? 'Анимированный остров' : 'Animated island';
-  String get animatedIslandSubtitle => isRu
-      ? 'Меняет короткий текст острова каждые 2-3 секунды для smart-уведомлений (может работать нестабильно).'
-      : 'Rotates compact island text every 2-3 seconds for smart notifications (may be unstable).';
-  String get hyperBridgeTitle => 'Xiaomi Hyper Island';
-  String get hyperBridgeSubtitle => isRu
-      ? 'Для Xiaomi Hyper OS 3.1 Глобальной: добавляет HyperOS Focus-параметры для нативного острова.'
-      : 'For Xiaomi Hyper OS 3.1 Global: injects HyperOS Focus parameters for native island behavior.';
-  String get aospCuttingTitle => isRu ? 'Обрезка AOSP' : 'AOSP cutting';
-  String get aospCuttingSubtitle => isRu
-      ? 'Обрезать информацию в острове до 7 символов для красивого отображения в AOSP-прошивках.'
-      : 'Trim island text to 7 characters for cleaner rendering on AOSP ROMs.';
-  String get appPresentationSettings =>
-      isRu ? 'Поведение приложений' : 'Per-app behavior';
-  String get appPresentationSubtitle => isRu
-      ? 'Настройте источник текста и иконки отдельно для разных приложений.'
-      : 'Choose text and icon behavior separately for different applications.';
-  String get appPresentationScreenTitle =>
-      isRu ? 'Поведение приложений' : 'Per-app behavior';
-  String get appPresentationLoadFailed => isRu
-      ? 'Не удалось загрузить настройки приложений.'
-      : 'Unable to load per-app settings.';
-  String get appPresentationSaveFailed => isRu
-      ? 'Не удалось сохранить настройки приложений.'
-      : 'Unable to save per-app settings.';
-  String get appPresentationDownloadFailed => isRu
-      ? 'Не удалось сохранить JSON настроек.'
-      : 'Failed to save settings JSON.';
-  String get appPresentationSaved =>
-      isRu ? 'Настройки сохранены в Загрузки.' : 'Settings saved to Downloads.';
-  String get appPresentationUploadDone =>
-      isRu ? 'Настройки приложений загружены.' : 'Per-app settings imported.';
-  String get appPresentationUploadFailed => isRu
-      ? 'Не удалось загрузить JSON настроек.'
-      : 'Failed to import settings JSON.';
-  String get appPresentationInvalidJson => isRu
-      ? 'Невалидный JSON настроек приложений.'
-      : 'Invalid per-app settings JSON.';
-  String get appPresentationDefaultSummary =>
-      isRu ? 'Стандартное поведение' : 'Default behavior';
-  String get appPresentationTextSourceLabel =>
-      isRu ? 'Источник текста для острова' : 'Island text source';
-  String get appPresentationIconSourceLabel =>
-      isRu ? 'Источник иконки' : 'Icon source';
-  String get appPresentationTextTitle =>
-      isRu ? 'Title уведомления' : 'Notification title';
-  String get appPresentationTextNotification =>
-      isRu ? 'Текст уведомления' : 'Notification text';
-  String get appPresentationIconNotification =>
-      isRu ? 'Иконка уведомления' : 'Notification icon';
-  String get appPresentationIconApp =>
-      isRu ? 'Иконка приложения' : 'Application icon';
+      _string('animatedIslandTitle', fallback: 'Animated island');
+  String get animatedIslandSubtitle => _string(
+        'animatedIslandSubtitle',
+        fallback:
+            'Rotates compact island text every 2-3 seconds for smart notifications (may be unstable).',
+      );
+  String get hyperBridgeTitle =>
+      _string('hyperBridgeTitle', fallback: 'Xiaomi Hyper Island');
+  String get hyperBridgeSubtitle => _string(
+        'hyperBridgeSubtitle',
+        fallback:
+            'For Xiaomi Hyper OS 3.1 Global: injects HyperOS Focus parameters for native island behavior.',
+      );
+  String get aospCuttingTitle =>
+      _string('aospCuttingTitle', fallback: 'AOSP cutting');
+  String get aospCuttingSubtitle => _string(
+        'aospCuttingSubtitle',
+        fallback: 'Trim island text to 7 characters for cleaner rendering on AOSP ROMs.',
+      );
+  String get appPresentationSettings => _string(
+        'appPresentationSettings',
+        fallback: 'Per-app behavior',
+      );
+  String get appPresentationSubtitle => _string(
+        'appPresentationSubtitle',
+        fallback: 'Choose text and icon behavior separately for different applications.',
+      );
+  String get appPresentationScreenTitle => _string(
+        'appPresentationScreenTitle',
+        fallback: 'Per-app behavior',
+      );
+  String get appPresentationLoadFailed => _string(
+        'appPresentationLoadFailed',
+        fallback: 'Unable to load per-app settings.',
+      );
+  String get appPresentationSaveFailed => _string(
+        'appPresentationSaveFailed',
+        fallback: 'Unable to save per-app settings.',
+      );
+  String get appPresentationDownloadFailed => _string(
+        'appPresentationDownloadFailed',
+        fallback: 'Failed to save settings JSON.',
+      );
+  String get appPresentationSaved => _string(
+        'appPresentationSaved',
+        fallback: 'Settings saved to Downloads.',
+      );
+  String get appPresentationUploadDone => _string(
+        'appPresentationUploadDone',
+        fallback: 'Per-app settings imported.',
+      );
+  String get appPresentationUploadFailed => _string(
+        'appPresentationUploadFailed',
+        fallback: 'Failed to import settings JSON.',
+      );
+  String get appPresentationInvalidJson => _string(
+        'appPresentationInvalidJson',
+        fallback: 'Invalid per-app settings JSON.',
+      );
+  String get appPresentationDefaultSummary => _string(
+        'appPresentationDefaultSummary',
+        fallback: 'Default behavior',
+      );
+  String get appPresentationTextSourceLabel => _string(
+        'appPresentationTextSourceLabel',
+        fallback: 'Island text source',
+      );
+  String get appPresentationIconSourceLabel => _string(
+        'appPresentationIconSourceLabel',
+        fallback: 'Icon source',
+      );
+  String get appPresentationTextTitle => _string(
+        'appPresentationTextTitle',
+        fallback: 'Notification title',
+      );
+  String get appPresentationTextNotification => _string(
+        'appPresentationTextNotification',
+        fallback: 'Notification text',
+      );
+  String get appPresentationIconNotification => _string(
+        'appPresentationIconNotification',
+        fallback: 'Notification icon',
+      );
+  String get appPresentationIconApp => _string(
+        'appPresentationIconApp',
+        fallback: 'Application icon',
+      );
   String get downloadSettings =>
-      isRu ? 'Скачать настройки' : 'Download settings';
-  String get uploadSettings => isRu ? 'Загрузить настройки' : 'Upload settings';
-  String get defaultLabel => isRu ? 'По умолчанию' : 'Default';
+      _string('downloadSettings', fallback: 'Download settings');
+  String get uploadSettings =>
+      _string('uploadSettings', fallback: 'Upload settings');
+  String get defaultLabel => _string('defaultLabel', fallback: 'Default');
   String get resetToDefault =>
-      isRu ? 'Сбросить к стандарту' : 'Reset to default';
-  String get save => isRu ? 'Сохранить' : 'Save';
+      _string('resetToDefault', fallback: 'Reset to default');
+  String get save => _string('save', fallback: 'Save');
   String get downloadDictionary =>
-      isRu ? 'Скачать словарь' : 'Download dictionary';
+      _string('downloadDictionary', fallback: 'Download dictionary');
   String get updateDictionary =>
-      isRu ? 'Обновить словарь' : 'Update dictionary';
+      _string('updateDictionary', fallback: 'Update dictionary');
   String get uploadDictionary =>
-      isRu ? 'Загрузить словарь' : 'Upload dictionary';
-  String get resetDictionary => isRu ? 'Сбросить словарь' : 'Reset dictionary';
-  String get pickApps => isRu ? 'Выбрать приложения' : 'Pick applications';
-  String get pickerTitle =>
-      isRu ? 'Приложения для конвертации' : 'Choose apps for conversion';
-  String get otpPickerTitle =>
-      isRu ? 'Приложения для кодов' : 'Choose apps for code detection';
-  String get bypassPickerTitle =>
-      isRu ? 'Приложения bypass' : 'Choose apps for bypass';
-  String get notificationDedupPickerTitle => isRu
-      ? 'Приложения для dedup'
-      : 'Choose apps for notification dedup';
-  String get applySelection => isRu ? 'Применить выбор' : 'Apply selection';
-  String get searchAppHint =>
-      isRu ? 'Поиск по названию или пакету' : 'Search by app or package';
+      _string('uploadDictionary', fallback: 'Upload dictionary');
+  String get resetDictionary =>
+      _string('resetDictionary', fallback: 'Reset dictionary');
+  String get pickApps => _string('pickApps', fallback: 'Pick applications');
+  String get pickerTitle => _string(
+        'pickerTitle',
+        fallback: 'Choose apps for conversion',
+      );
+  String get otpPickerTitle => _string(
+        'otpPickerTitle',
+        fallback: 'Choose apps for code detection',
+      );
+  String get bypassPickerTitle => _string(
+        'bypassPickerTitle',
+        fallback: 'Choose apps for bypass',
+      );
+  String get notificationDedupPickerTitle => _string(
+        'notificationDedupPickerTitle',
+        fallback: 'Choose apps for notification dedup',
+      );
+  String get applySelection =>
+      _string('applySelection', fallback: 'Apply selection');
+  String get searchAppHint => _string(
+        'searchAppHint',
+        fallback: 'Search by app or package',
+      );
   String get showSystemApps =>
-      isRu ? 'Показать системные приложения' : 'Show system applications';
+      _string('showSystemApps', fallback: 'Show system applications');
   String get hideSystemApps =>
-      isRu ? 'Скрыть системные приложения' : 'Hide system applications';
-  String get appsLoadFailed => isRu
-      ? 'Не удалось загрузить список приложений.'
-      : 'Unable to load installed apps list.';
+      _string('hideSystemApps', fallback: 'Hide system applications');
+  String get appsLoadFailed => _string(
+        'appsLoadFailed',
+        fallback: 'Unable to load installed apps list.',
+      );
   String get appsAccessTitle =>
-      isRu ? 'Доступ к списку приложений' : 'App list access';
-  String get appsAccessMessage => isRu
-      ? 'Разрешить LiveBridge читать список установленных приложений для выбора правил?'
-      : 'Allow LiveBridge to read installed apps so you can pick apps for rules?';
-  String get appsAccessSaveFailed => isRu
-      ? 'Не удалось сохранить выбор доступа.'
-      : 'Unable to save access preference.';
-  String get cancel => isRu ? 'Отмена' : 'Cancel';
-  String get allow => isRu ? 'Разрешить' : 'Allow';
-  String selectedAppsCount(int value) =>
-      isRu ? 'Выбрано приложений: $value' : 'Selected apps: $value';
+      _string('appsAccessTitle', fallback: 'App list access');
+  String get appsAccessMessage => _string(
+        'appsAccessMessage',
+        fallback: 'Allow LiveBridge to read installed apps so you can pick apps for rules?',
+      );
+  String get appsAccessSaveFailed => _string(
+        'appsAccessSaveFailed',
+        fallback: 'Unable to save access preference.',
+      );
+  String get cancel => _string('cancel', fallback: 'Cancel');
+  String get allow => _string('allow', fallback: 'Allow');
+  String selectedAppsCount(int value) {
+    final String template = _string(
+      'selectedAppsCount',
+      fallback: 'Selected apps: {count}',
+    );
+    return _format(template, {'count': value.toString()});
+  }
+
   String get noAppsSelected =>
-      isRu ? 'Приложения не выбраны' : 'No applications selected';
+      _string('noAppsSelected', fallback: 'No applications selected');
 
-  String get rulesTitle => isRu ? 'Режим конвертации' : 'Conversion behavior';
-  String get rulesSubtitle => isRu
-      ? 'Настройте, что именно превращать в Live Updates.'
-      : 'Define what should be converted into Live Updates.';
-  String get modeLabel => isRu ? 'Режим работы' : 'Application mode';
-  String get modeAll => isRu ? 'Все приложения' : 'All applications';
-  String get modeInclude =>
-      isRu ? 'Только указанные' : 'Only listed applications';
-  String get modeExclude =>
-      isRu ? 'Исключить указанные' : 'Exclude listed applications';
-  String get pickAppsHint => isRu
-      ? 'Список используется только в режимах "Только указанные" или "Исключить".'
-      : 'Selected app list is used only for include/exclude modes.';
-  String get bypassRulesTitle => isRu ? 'Bypass-приложения' : 'Bypass apps';
-  String get bypassRulesSubtitle => isRu
-      ? 'Приложения из списка всегда конвертируются в Live вне зависимости от настроек.'
-      : 'Listed apps are always converted to Live independently of settings.';
-  String get saveRules => isRu ? 'Сохранить' : 'Save';
+  String get rulesTitle =>
+      _string('rulesTitle', fallback: 'Conversion behavior');
+  String get rulesSubtitle => _string(
+        'rulesSubtitle',
+        fallback: 'Define what should be converted into Live Updates.',
+      );
+  String get modeLabel => _string('modeLabel', fallback: 'Application mode');
+  String get modeAll => _string('modeAll', fallback: 'All applications');
+  String get modeInclude => _string(
+        'modeInclude',
+        fallback: 'Only listed applications',
+      );
+  String get modeExclude => _string(
+        'modeExclude',
+        fallback: 'Exclude listed applications',
+      );
+  String get pickAppsHint => _string(
+        'pickAppsHint',
+        fallback: 'Selected app list is used only for include/exclude modes.',
+      );
+  String get bypassRulesTitle =>
+      _string('bypassRulesTitle', fallback: 'Bypass apps');
+  String get bypassRulesSubtitle => _string(
+        'bypassRulesSubtitle',
+        fallback: 'Listed apps are always converted to Live independently of settings.',
+      );
+  String get saveRules => _string('saveRules', fallback: 'Save');
 
-  String get smartDetectionTitle =>
-      isRu ? 'Умное распознавание' : 'Smart status detection';
+  String get smartDetectionTitle => _string(
+        'smartDetectionTitle',
+        fallback: 'Smart status detection',
+      );
   String get smartCardTitle =>
-      isRu ? 'Умное преобразование' : 'Smart conversion';
-  String get smartCardSubtitle => isRu
-      ? 'Преобразование текстовых этапов в один Live-прогресс.'
-      : 'Converts text-only stage updates into one Live progress flow.';
-  String get smartDetectionSubtitle => isRu
-      ? 'Преобразует текстовые статусы еды, такси и навигации в единый Live-прогресс.'
-      : 'Converts text-only food/taxi/navigation status notifications into a single Live.';
+      _string('smart_conversion_title', fallback: 'Smart conversion');
+  String get smartCardSubtitle => _string(
+        'smartCardSubtitle',
+        fallback: 'Converts text-only stage updates into one Live progress flow.',
+      );
+  String get smartDetectionSubtitle => _string(
+        'smartDetectionSubtitle',
+        fallback:
+            'Converts text-only food/taxi/navigation status notifications into a single Live.',
+      );
   String get smartMediaPlaybackTitle =>
-      isRu ? 'Media Playback' : 'Media Playback';
-  String get smartMediaPlaybackSubtitle => isRu
-      ? 'Преобразует уведомления медиаплеера в Live. На некоторых OEM может дублировать нативный плеер.'
-      : 'Converts media playback notifications into Live. On some OEMs this may duplicate native media UI.';
-  String get smartNavigationTitle =>
-      isRu ? 'Навигация (карты)' : 'Navigation (maps)';
-  String get smartNavigationSubtitle => isRu
-      ? 'Распознавание уведомлений навигации.'
-      : 'Navigation notification detection.';
-  String get smartWeatherTitle => isRu ? 'Погода' : 'Weather';
-  String get smartWeatherSubtitle => isRu
-      ? 'Распознавание погодных уведомлений (температура в острове).'
-      : 'Weather notification detection (temperature in island).';
-  String get smartExternalDevicesTitle =>
-      isRu ? 'Внешние устройства' : 'External devices';
-  String get smartExternalDevicesSubtitle => isRu
-      ? 'Показывает статус connected/connecting и имя устройства в острове.'
-      : 'Shows connected/connecting status and device name in island.';
-  String get smartVpnTitle => isRu ? 'VPN-сервисы' : 'VPN services';
-  String get smartVpnSubtitle => isRu
-      ? 'Показывает входящий/исходящий трафик в формате *b/s.'
-      : 'Shows incoming/outgoing traffic speed in *b/s format.';
-  String get smartNavigationDisabledSubtitle => isRu
-      ? 'Сначала включите умное распознавание.'
-      : 'Enable smart status detection first.';
-  String get smartDetectionDisabledSubtitle => isRu
-      ? 'Отключено в режиме "Прогресс".'
-      : 'Disabled while "Progress" mode is enabled.';
-  String get conflictingModesHint => isRu
-      ? 'Чтобы работали текстовые статусы, отключите режим "Прогресс".'
-      : 'Turn off "Progress" mode to enable food/taxi/navigation text status recognition.';
-  String get onlyProgressTitle => isRu ? 'Прогресс' : 'Progress';
-  String get onlyProgressSubtitle => isRu
-      ? 'Если включено, конвертируются только уведомления с системным прогрессбаром.'
-      : 'When enabled, only notifications with a system progress bar are converted.';
+      _string('smartMediaPlaybackTitle', fallback: 'Media Playback');
+  String get smartMediaPlaybackSubtitle => _string(
+        'smartMediaPlaybackSubtitle',
+        fallback:
+            'Converts media playback notifications into Live. On some OEMs this may duplicate native media UI.',
+      );
+  String get smartNavigationTitle => _string(
+        'smartNavigationTitle',
+        fallback: 'Navigation (maps)',
+      );
+  String get smartNavigationSubtitle => _string(
+        'smartNavigationSubtitle',
+        fallback: 'Navigation notification detection.',
+      );
+  String get smartWeatherTitle => _string('smartWeatherTitle', fallback: 'Weather');
+  String get smartWeatherSubtitle => _string(
+        'smartWeatherSubtitle',
+        fallback: 'Weather notification detection (temperature in island).',
+      );
+  String get smartExternalDevicesTitle => _string(
+        'smartExternalDevicesTitle',
+        fallback: 'External devices',
+      );
+  String get smartExternalDevicesSubtitle => _string(
+        'smartExternalDevicesSubtitle',
+        fallback: 'Shows connected/connecting status and device name in island.',
+      );
+  String get smartVpnTitle =>
+      _string('smartVpnTitle', fallback: 'VPN services');
+  String get smartVpnSubtitle => _string(
+        'smartVpnSubtitle',
+        fallback: 'Shows incoming/outgoing traffic speed in *b/s format.',
+      );
+  String get smartNavigationDisabledSubtitle => _string(
+        'smartNavigationDisabledSubtitle',
+        fallback: 'Enable smart status detection first.',
+      );
+  String get smartDetectionDisabledSubtitle => _string(
+        'smartDetectionDisabledSubtitle',
+        fallback: 'Disabled while "Progress" mode is enabled.',
+      );
+  String get conflictingModesHint => _string(
+        'conflictingModesHint',
+        fallback:
+            'Turn off "Progress" mode to enable food/taxi/navigation text status recognition.',
+      );
+  String get onlyProgressTitle => _string('onlyProgressTitle', fallback: 'Progress');
+  String get onlyProgressSubtitle => _string(
+        'onlyProgressSubtitle',
+        fallback: 'When enabled, only notifications with a system progress bar are converted.',
+      );
   String get textProgressTitle =>
-      isRu ? 'Текстовые прогрессы' : 'Text progress';
-  String get textProgressSubtitle => isRu
-      ? 'Если в тексте есть %, и это не скидка/акция, считать как прогресс и обновлять остров.'
-      : 'If text contains % and it is not discount-related, treat it as progress and update island.';
+      _string('textProgressTitle', fallback: 'Text progress');
+  String get textProgressSubtitle => _string(
+        'textProgressSubtitle',
+        fallback:
+            'If text contains % and it is not discount-related, treat it as progress and update island.',
+      );
 
-  String get blockedTitle =>
-      isRu ? 'AOSP поддерживается частично' : 'AOSP is partially supported';
-  String get blockedSubtitle => isRu
-      ? 'LiveBridge плохо работает на устройствах с AOSP. Можете продолжить, но за последствия я не отвечаю.'
-      : 'LiveBridge is not designed for AOSP. You can continue, but i am not responsible for any bugs.';
-  String get blockedBypassAction =>
-      isRu ? 'Все равно родолжить' : 'Continue anyway';
-  String get blockedBypassSaveFailed =>
-      isRu ? 'Не удалось сохранить выбор.' : 'Unable to save your choice.';
+  String get blockedTitle => _string(
+        'blockedTitle',
+        fallback: 'AOSP is partially supported',
+      );
+  String get blockedSubtitle => _string(
+        'blockedSubtitle',
+        fallback:
+            'LiveBridge is not designed for AOSP. You can continue, but i am not responsible for any bugs.',
+      );
+  String get blockedBypassAction => _string(
+        'blockedBypassAction',
+        fallback: 'Continue anyway',
+      );
+  String get blockedBypassSaveFailed => _string(
+        'blockedBypassSaveFailed',
+        fallback: 'Unable to save your choice.',
+      );
 
-  String get otpTitle => isRu ? 'Коды подтверждения' : 'Verification codes';
-  String get otpSubtitle => isRu
-      ? 'Показывает код компактно в острове.'
-      : 'Shows the code in compact island.';
-  String get otpEnabledTitle =>
-      isRu ? 'Распознавать 2FA коды' : 'Detect verification codes';
-  String get otpEnabledSubtitle => isRu
-      ? 'В свернутом Live-острове показывается сам код.'
-      : 'Shows the numeric code in the compact island.';
-  String get otpAutoCopyTitle =>
-      isRu ? 'Автокопирование кода' : 'Auto-copy code';
-  String get otpAutoCopySubtitle => isRu
-      ? 'Код сразу копируется в буфер обмена.'
-      : 'Code is copied to clipboard automatically.';
-  String get otpAutoCopyDisabledSubtitle => isRu
-      ? 'Сначала включите распознавание кодов.'
-      : 'Enable code detection first.';
-  String get otpModeLabel => isRu ? 'Режим для кодов' : 'Code apps mode';
-  String get saveOtpRules => isRu ? 'Сохранить' : 'Save';
+  String get otpTitle =>
+      _string('otpTitle', fallback: 'Verification codes');
+  String get otpSubtitle => _string(
+        'otpSubtitle',
+        fallback: 'Shows the code in compact island.',
+      );
+  String get otpEnabledTitle => _string(
+        'otpEnabledTitle',
+        fallback: 'Detect verification codes',
+      );
+  String get otpEnabledSubtitle => _string(
+        'otpEnabledSubtitle',
+        fallback: 'Shows the numeric code in the compact island.',
+      );
+  String get otpAutoCopyTitle => _string(
+        'otpAutoCopyTitle',
+        fallback: 'Auto-copy code',
+      );
+  String get otpAutoCopySubtitle => _string(
+        'otpAutoCopySubtitle',
+        fallback: 'Code is copied to clipboard automatically.',
+      );
+  String get otpAutoCopyDisabledSubtitle => _string(
+        'otpAutoCopyDisabledSubtitle',
+        fallback: 'Enable code detection first.',
+      );
+  String get otpModeLabel =>
+      _string('otpModeLabel', fallback: 'Code apps mode');
+  String get saveOtpRules => _string('saveOtpRules', fallback: 'Save');
+}
+
+class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
+  const _AppStringsDelegate();
+
+  @override
+  bool isSupported(Locale locale) {
+    return AppStrings.supportedLocales.any(
+      (supported) => supported.languageCode == locale.languageCode.toLowerCase(),
+    );
+  }
+
+  @override
+  Future<AppStrings> load(Locale locale) => AppStrings.load(locale);
+
+  @override
+  bool shouldReload(_AppStringsDelegate old) => false;
 }
